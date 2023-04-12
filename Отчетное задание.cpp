@@ -56,41 +56,41 @@ enum class DocumentStatus {
     BANNED,
     REMOVED,
 };
-
+// 2. начало класса, внутри которого есть приватные и публичные поля. и все основные функции. пойдем по порядку.
 class SearchServer {
 public:
-    void SetStopWords(const string& text) {
-        for (const string& word : SplitIntoWords(text)) {
+    void SetStopWords(const string& text) {                    //3. принимает список стоп-слов, и вызывает функцию, которая как раз парсит строку на отдельные слова. В принципе названия функций отражают их
+        for (const string& word : SplitIntoWords(text)) {      // назначение. SplitIntoWords вернет нам вектор из слов, которые циклом складываются в вектор со стоп-словами.
             stop_words_.insert(word);
         }
     }
 
-    void AddDocument(int document_id, const string& document, DocumentStatus status,
+    void AddDocument(int document_id, const string& document, DocumentStatus status, // 4.1 Эта функция принимает документы и:
                      const vector<int>& ratings) {
-        const vector<string> words = SplitIntoWordsNoStop(document);
-        const double inv_word_count = 1.0 / words.size();
-        for (const string& word : words) {
-            word_to_document_freqs_[word][document_id] += inv_word_count;
+        const vector<string> words = SplitIntoWordsNoStop(document);          // 4.2 убирает из запроса стоп-слова,
+        const double inv_word_count = 1.0 / words.size();                          // 4.3 считает частоту упоминания каждого слова во всем тексте документа(TF). Параметр  Term Frequency пригодится для подсчета релевантности.
+        for (const string& word : words) {                                         // 4.4 собирает нам хитрый словарь типа map<string, map<int, double>>, где ключ - это слово, а значение - еще одна мапа, в которой внутренний ключ id документа, значение - (TF);
+            word_to_document_freqs_[word][document_id] += inv_word_count;          // 4.5 последние значение double для того, что бы правильней считать релевантность и правильно отсортировать результаты поиска.
         }
-        documents_.emplace(document_id, DocumentData{ComputeAverageRating(ratings), status});
+        documents_.emplace(document_id, DocumentData{ComputeAverageRating(ratings), status}); // 4.5 заполняет структуру с полями, соответствующими значениями.
     }
 
     template<typename Filter>
-    vector<Document> FindTopDocuments(const string& raw_query, Filter filter_id_stat_rat
-            /*DocumentStatus status = DocumentStatus::ACTUAL*/) const {
-        const Query query = ParseQuery(raw_query);
-        auto matched_documents = FindAllDocuments(query, filter_id_stat_rat);
-
-        sort(matched_documents.begin(), matched_documents.end(),
-             [](const Document& lhs, const Document& rhs) {
-                 if (abs(lhs.relevance - rhs.relevance) < 1e-6) {
-                     return lhs.rating > rhs.rating;
-                 } else {
+    vector<Document> FindTopDocuments(const string& raw_query, Filter filter_id_stat_rat // 5.1 На самом деле, этот метод вызывается в самом конце, но по нему можно почти весь класс и описать.
+            /*DocumentStatus status = DocumentStatus::ACTUAL*/) const {                  // 5.2 метод принимает строку запроса, а в Filter принимается лямбда-функция, которая рассказывает как этому методу работать со статусами документов.
+        const Query query = ParseQuery(raw_query);                                  // Это которые ACTUAL, BANNED, IRRELEVANT, REMOVED.
+        auto matched_documents = FindAllDocuments(query, filter_id_stat_rat);            // 5.3 Парсим запрос и отправляем в самый большой метод, который ищет все совпадающие документы и возвращает релевантные. Думаю нет смысла описывать FindAllDocuments,
+                                                                                         // он правда слишком большой. Скажу лишь, что в запросе могут быть слова с минусом "-хвост" и документ даже полностью совпавший с запросов, но имеющий слово "хвост", в результате не появится.
+        sort(matched_documents.begin(), matched_documents.end(),                         // 5.4 Дальше, FindAllDocuments вернет вектор с типом структуры, в которой буду храниться все данные о совпавших по поиску документах. Этот метод рассчитает до конца релевантность и прочее.
+             [](const Document& lhs, const Document& rhs) {                              // 5.5 потом нужно отсортировать результаты и метод sort это сделает, но его нужно научить, по какому параметру сортировать. Поэтому первыми параметрами задается диапазон сортировки,
+                 if (abs(lhs.relevance - rhs.relevance) < 1e-6) {                     // а третьим параметром передаётся лямбда-функция, которая научит его сортировать правильно.
+                     return lhs.rating > rhs.rating;                                     // в условии первого if странная запись, но так как мы сортируем по рейтингу, а его тип double, то для более правильного сравнения применяется такой способ, так как он позволяет
+                 } else {                                                                // сравнить числа, которые отличаются до шестого знака после запятой.
                      return lhs.relevance > rhs.relevance;
                  }
              });
-        if (matched_documents.size() > MAX_RESULT_DOCUMENT_COUNT) {
-            matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
+        if (matched_documents.size() > MAX_RESULT_DOCUMENT_COUNT) {                    // 6.1 Далее нам, при большом количестве документов все результаты не понадобятся. Хватит первых пяти с наибольшей релевантностью и это здесь и происходит.
+            matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);                       // 6.2 возвращаем все это в main и печатаем специальной функцией. Если вкратце, то как-то так=)
         }
         return matched_documents;
     }
@@ -207,7 +207,7 @@ private:
     }
 
     template<typename Filter>
-    vector<Document> FindAllDocuments(const Query& query, Filter filter_id_stat_rat) const {
+    vector<Document> FindAllDocuments(const Query& query, Filter filter_id_stat_rat) const {          //
         map<int, double> document_to_relevance;
         for (const string& word : query.plus_words) {
             if (word_to_document_freqs_.count(word) == 0) {
@@ -239,7 +239,7 @@ private:
     }
 };
 
-// ==================== для примера =========================
+
 
 void PrintDocument(const Document& document) {
     cout << "{ "s
@@ -248,6 +248,11 @@ void PrintDocument(const Document& document) {
          << "rating = "s << document.rating
          << " }"s << endl;
 }
+// 1. и так, все начинается здесь. в первой строке создаётся объект search_server, а затем вызываются методы.
+// SetStopWords принимает список стоп-слов, которые будут игнорироваться при поиске.
+// AddDocument принимает id, сам документ, его статус и рэйтинг. В прошлой версии кода, id присваивался автоматически.
+// формируется запрос со статусом и разными формами дополнительных атрибутов, с которыми мы хотим поискать.
+// затем вызывается функция, которая напечатает нам результат в консоль. Далее пойду по методам.
 int main() {
     SearchServer search_server;
     search_server.SetStopWords("и в на"s);
